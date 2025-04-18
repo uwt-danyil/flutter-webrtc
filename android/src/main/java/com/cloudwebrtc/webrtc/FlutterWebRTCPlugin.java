@@ -24,11 +24,6 @@ import io.flutter.plugin.common.EventChannel;
 import io.flutter.plugin.common.MethodChannel;
 import io.flutter.view.TextureRegistry;
 
-import io.flutter.embedding.engine.plugins.FlutterPlugin;
-import io.flutter.plugin.common.PluginRegistry.Registrar;
-import io.flutter.embedding.engine.plugins.activity.ActivityAware;
-import io.flutter.embedding.engine.plugins.ActivityPluginBinding;
-
 /**
  * FlutterWebRTCPlugin
  */
@@ -47,38 +42,8 @@ public class FlutterWebRTCPlugin implements FlutterPlugin, ActivityAware, EventC
     public FlutterWebRTCPlugin() {
     }
 
-    /**
-     * Plugin registration.
-     */
-    public static void registerWith(Registrar registrar) {
-        final FlutterWebRTCPlugin plugin = new FlutterWebRTCPlugin();
-
-        plugin.initPlugin(registrar.context(), registrar.messenger(), registrar.textures());
-
-        if (registrar.activity() != null) {
-          registrar
-            .activity()
-            .getApplication()
-            .registerActivityLifecycleCallbacks(plugin.lifecycleObserver);
-        }
-
-        if (registrar.activeContext() instanceof Activity) {
-            plugin.methodCallHandler.setActivity((Activity) registrar.activeContext());
-        }
-        application = ((Application) registrar.context().getApplicationContext());
-        application.registerActivityLifecycleCallbacks(plugin.observer);
-
-        registrar.addViewDestroyListener(view -> {
-            plugin.stopListening();
-            return false;
-        });
-    }
-
     @Override
     public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
-        // startListening(binding.getApplicationContext(), binding.getBinaryMessenger(),
-        //         binding.getTextureRegistry());
-
         initPlugin(
             binding.getApplicationContext(),
             binding.getBinaryMessenger(),
@@ -123,33 +88,16 @@ public class FlutterWebRTCPlugin implements FlutterPlugin, ActivityAware, EventC
 
     private void initPlugin(Context context, BinaryMessenger messenger,
                                 TextureRegistry textureRegistry) {
-        handler = new MethodCallHandlerImpl(context, messenger, textures);
-        methodChannel = new MethodHandler(messenger, "FlutterWebRTC.Method");
-        methodChannel.setMethodCallHandler(handler);
+        methodCallHandler = new MethodCallHandlerImpl(context, messenger, textureRegistry);
+        methodChannel = new MethodChannel(messenger, "FlutterWebRTC.Method");
+        methodChannel.setMethodCallHandler(methodCallHandler);
 
         eventChannel = new EventChannel(messenger, "FlutterWebRTC.Event");
         eventChannel.setStreamHandler(this);
 
         AudioSwitchManager.instance = new AudioSwitchManager(context);
         AudioSwitchManager.instance.audioDeviceChangeListener = (devices, currentDevice) -> {
-            Log.w(TAG, "audioFocusChangeListener " + devices+ " " + currentDevice);
-            ConstraintsMap params = new ConstraintsMap();
-            params.putString("event", "onDeviceChange");
-            sendEvent(params.toMap());
-            return null;
-        };
-    }
-
-    private void startListening(final Context context, BinaryMessenger messenger,
-                                TextureRegistry textureRegistry) {
-        AudioSwitchManager.instance = new AudioSwitchManager(context);
-        methodCallHandler = new MethodCallHandlerImpl(context, messenger, textureRegistry);
-        methodChannel = new MethodChannel(messenger, "FlutterWebRTC.Method");
-        methodChannel.setMethodCallHandler(methodCallHandler);
-        eventChannel = new EventChannel( messenger,"FlutterWebRTC.Event");
-        eventChannel.setStreamHandler(this);
-        AudioSwitchManager.instance.audioDeviceChangeListener = (devices, currentDevice) -> {
-            Log.w(TAG, "audioFocusChangeListener " + devices+ " " + currentDevice);
+            Log.w(TAG, "audioFocusChangeListener " + devices + " " + currentDevice);
             ConstraintsMap params = new ConstraintsMap();
             params.putString("event", "onDeviceChange");
             sendEvent(params.toMap());

@@ -22,8 +22,12 @@ import io.flutter.embedding.engine.plugins.lifecycle.HiddenLifecycleReference;
 import io.flutter.plugin.common.BinaryMessenger;
 import io.flutter.plugin.common.EventChannel;
 import io.flutter.plugin.common.MethodChannel;
-import io.flutter.plugin.common.PluginRegistry.Registrar;
+// import io.flutter.plugin.common.PluginRegistry.Registrar;
 import io.flutter.view.TextureRegistry;
+
+import io.flutter.embedding.engine.plugins.FlutterPlugin;
+import io.flutter.embedding.engine.plugins.activity.ActivityAware;
+import io.flutter.embedding.engine.plugins.ActivityPluginBinding;
 
 /**
  * FlutterWebRTCPlugin
@@ -49,7 +53,14 @@ public class FlutterWebRTCPlugin implements FlutterPlugin, ActivityAware, EventC
     public static void registerWith(Registrar registrar) {
         final FlutterWebRTCPlugin plugin = new FlutterWebRTCPlugin();
 
-        plugin.startListening(registrar.context(), registrar.messenger(), registrar.textures());
+        plugin.initPlugin(registrar.context(), registrar.messenger(), registrar.textures());
+
+        if (registrar.activity() != null) {
+          registrar
+            .activity()
+            .getApplication()
+            .registerActivityLifecycleCallbacks(plugin.lifecycleObserver);
+        }
 
         if (registrar.activeContext() instanceof Activity) {
             plugin.methodCallHandler.setActivity((Activity) registrar.activeContext());
@@ -65,8 +76,14 @@ public class FlutterWebRTCPlugin implements FlutterPlugin, ActivityAware, EventC
 
     @Override
     public void onAttachedToEngine(@NonNull FlutterPluginBinding binding) {
-        startListening(binding.getApplicationContext(), binding.getBinaryMessenger(),
-                binding.getTextureRegistry());
+        // startListening(binding.getApplicationContext(), binding.getBinaryMessenger(),
+        //         binding.getTextureRegistry());
+
+        initPlugin(
+            binding.getApplicationContext(),
+            binding.getBinaryMessenger(),
+            binding.getTextureRegistry()
+        );
     }
 
     @Override
@@ -102,6 +119,25 @@ public class FlutterWebRTCPlugin implements FlutterPlugin, ActivityAware, EventC
             }
         }
         this.lifecycle = null;
+    }
+
+    private void initPlugin(Context context, BinaryMessenger messenger,
+                                TextureRegistry textureRegistry) {
+        handler = new MethodCallHandlerImpl(context, messenger, textures);
+        methodChannel = new MethodHandler(messenger, "FlutterWebRTC.Method");
+        methodChannel.setMethodCallHandler(handler);
+
+        eventChannel = new EventChannel(messenger, "FlutterWebRTC.Event");
+        eventChannel.setStreamHandler(this);
+
+        AudioSwitchManager.instance = new AudioSwitchManager(context);
+        AudioSwitchManager.instance.audioDeviceChangeListener = (devices, currentDevice) -> {
+            Log.w(TAG, "audioFocusChangeListener " + devices+ " " + currentDevice);
+            ConstraintsMap params = new ConstraintsMap();
+            params.putString("event", "onDeviceChange");
+            sendEvent(params.toMap());
+            return null;
+        };
     }
 
     private void startListening(final Context context, BinaryMessenger messenger,
